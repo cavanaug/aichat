@@ -81,6 +81,9 @@ pub struct Cli {
     /// List all macros
     #[clap(long)]
     pub list_macros: bool,
+    /// Show GitHub Copilot auth cache status
+    #[clap(long)]
+    pub github_copilot_auth_status: bool,
     /// Input text
     #[clap(trailing_var_arg = true)]
     text: Vec<String>,

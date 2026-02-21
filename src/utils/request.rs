@@ -166,7 +166,11 @@ pub async fn fetch_with_loaders(
     Ok(result)
 }
 
-pub async fn fetch_models(api_base: &str, api_key: Option<&str>) -> Result<Vec<String>> {
+pub async fn fetch_models(
+    api_base: &str,
+    api_key: Option<&str>,
+    extra_headers: Option<&[(String, String)]>,
+) -> Result<Vec<String>> {
     let client = match *CLIENT {
         Ok(ref client) => client,
         Err(ref err) => bail!("{err}"),
@@ -174,6 +178,11 @@ pub async fn fetch_models(api_base: &str, api_key: Option<&str>) -> Result<Vec<S
     let mut builder = client.get(format!("{}/models", api_base.trim_end_matches('/')));
     if let Some(api_key) = api_key {
         builder = builder.bearer_auth(api_key);
+    }
+    if let Some(headers) = extra_headers {
+        for (key, value) in headers {
+            builder = builder.header(key, value);
+        }
     }
     let res_body: Value = builder.send().await?.json().await?;
     let mut result: Vec<String> = res_body

@@ -1382,6 +1382,43 @@
 
 # Links:
 #  - https://github.com/marketplace?type=models
+- provider: github-copilot
+  models:
+    - name: gpt-5
+      max_input_tokens: 400000
+      max_output_tokens: 128000
+      supports_vision: true
+      supports_function_calling: true
+    - name: gpt-5-mini
+      max_input_tokens: 400000
+      max_output_tokens: 128000
+      supports_vision: true
+      supports_function_calling: true
+    - name: gpt-5-nano
+      max_input_tokens: 400000
+      max_output_tokens: 128000
+      supports_vision: true
+      supports_function_calling: true
+    - name: gpt-4.1
+      max_input_tokens: 1047576
+      max_output_tokens: 32768
+      supports_vision: true
+      supports_function_calling: true
+    - name: gpt-4o
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      supports_function_calling: true
+    - name: text-embedding-3-large
+      type: embedding
+      max_tokens_per_chunk: 8191
+      default_chunk_size: 2000
+      max_batch_size: 100
+    - name: text-embedding-3-small
+      type: embedding
+      max_tokens_per_chunk: 8191
+      default_chunk_size: 2000
+      max_batch_size: 100
+
 - provider: github
   models:
     - name: gpt-5

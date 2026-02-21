@@ -235,6 +235,10 @@ clients:
     region: xxx
     session_token: xxx  # Optional, only needed for temporary credentials
 
+  - type: github-copilot
+    # Device flow login starts automatically on first request.
+    # Tokens are cached in AICHAT_STATE_DIR (or XDG_STATE_HOME/aichat).
+
   # See https://developers.cloudflare.com/workers-ai/
   - type: openai-compatible
     name: cloudflare

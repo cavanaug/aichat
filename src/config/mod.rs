@@ -60,6 +60,7 @@ const FUNCTIONS_DIR_NAME: &str = "functions";
 const FUNCTIONS_FILE_NAME: &str = "functions.json";
 const FUNCTIONS_BIN_DIR_NAME: &str = "bin";
 const AGENTS_DIR_NAME: &str = "agents";
+const GITHUB_COPILOT_AUTH_FILE_NAME: &str = "github-copilot-auth.json";
 
 const CLIENTS_FIELD: &str = "clients";
 
@@ -301,6 +302,24 @@ impl Config {
         Self::config_dir().join(name)
     }
 
+    pub fn state_dir() -> PathBuf {
+        if let Ok(v) = env::var(get_env_name("state_dir")) {
+            PathBuf::from(v)
+        } else if let Ok(v) = env::var("XDG_STATE_HOME") {
+            PathBuf::from(v).join(env!("CARGO_CRATE_NAME"))
+        } else if let Some(dir) = dirs::state_dir() {
+            dir.join(env!("CARGO_CRATE_NAME"))
+        } else if let Some(dir) = dirs::data_local_dir() {
+            dir.join(env!("CARGO_CRATE_NAME"))
+        } else {
+            Self::config_dir()
+        }
+    }
+
+    pub fn local_state_path(name: &str) -> PathBuf {
+        Self::state_dir().join(name)
+    }
+
     pub fn config_file() -> PathBuf {
         match env::var(get_env_name("config_file")) {
             Ok(value) => PathBuf::from(value),
@@ -428,6 +447,46 @@ impl Config {
 
     pub fn models_override_file() -> PathBuf {
         Self::local_path("models-override.yaml")
+    }
+
+    pub fn github_copilot_auth_file() -> PathBuf {
+        match env::var(get_env_name("github_copilot_auth_file")) {
+            Ok(value) => PathBuf::from(value),
+            Err(_) => Self::local_state_path(GITHUB_COPILOT_AUTH_FILE_NAME),
+        }
+    }
+
+    pub fn load_github_copilot_auth_state() -> Result<Option<CopilotAuthState>> {
+        let path = Self::github_copilot_auth_file();
+        if !path.exists() {
+            return Ok(None);
+        }
+        let content = read_to_string(&path).with_context(|| {
+            format!(
+                "Failed to load GitHub Copilot auth state at '{}'",
+                path.display()
+            )
+        })?;
+        let state = serde_json::from_str(&content).with_context(|| {
+            format!("Invalid GitHub Copilot auth state at '{}'", path.display())
+        })?;
+        Ok(Some(state))
+    }
+
+    pub fn save_github_copilot_auth_state(state: &CopilotAuthState) -> Result<()> {
+        let path = Self::github_copilot_auth_file();
+        ensure_parent_exists(&path)?;
+        let data = serde_json::to_string_pretty(state)
+            .with_context(|| "Failed to serialize GitHub Copilot auth state")?;
+        std::fs::write(&path, data)
+            .with_context(|| format!("Failed to write to '{}'", path.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::prelude::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(&path, perms)?;
+        }
+        Ok(())
     }
 
     pub fn state(&self) -> StateFlags {
@@ -614,10 +673,60 @@ impl Config {
             ("macros_dir", display_path(&Self::macros_dir())),
             ("functions_dir", display_path(&Self::functions_dir())),
             ("messages_file", display_path(&self.messages_file())),
+            ("state_dir", display_path(&Self::state_dir())),
+            (
+                "github_copilot_auth_file",
+                display_path(&Self::github_copilot_auth_file()),
+            ),
         ];
         if let Ok((_, Some(log_path))) = Self::log_config(self.working_mode.is_serve()) {
             items.push(("log_path", display_path(&log_path)));
         }
+        let output = items
+            .iter()
+            .map(|(name, value)| format!("{name:<24}{value}\n"))
+            .collect::<Vec<String>>()
+            .join("");
+        Ok(output)
+    }
+
+    pub fn github_copilot_auth_status(&self) -> Result<String> {
+        let auth_file = Self::github_copilot_auth_file();
+        let state = Self::load_github_copilot_auth_state()?;
+        let now = now_timestamp();
+
+        let mut items = vec![("github_copilot_auth_file", auth_file.display().to_string())];
+        if let Some(state) = state {
+            let has_oauth = state
+                .github_oauth_token
+                .as_ref()
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false);
+            let has_api_token = state
+                .copilot_api_token
+                .as_ref()
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false);
+            let expires_at = format_option_value(&state.expires_at);
+            let refresh_in = format_option_value(&state.refresh_in);
+            let obtained_at = format_option_value(&state.obtained_at);
+            let expires_in_seconds = state.expires_at.map(|v| v - now);
+            let token_expired = state.expires_at.map(|v| now >= v).unwrap_or(false);
+
+            items.push(("has_github_oauth_token", has_oauth.to_string()));
+            items.push(("has_copilot_api_token", has_api_token.to_string()));
+            items.push(("expires_at", expires_at));
+            items.push((
+                "expires_in_seconds",
+                format_option_value(&expires_in_seconds),
+            ));
+            items.push(("refresh_in", refresh_in));
+            items.push(("obtained_at", obtained_at));
+            items.push(("api_token_expired", token_expired.to_string()));
+        } else {
+            items.push(("state", "missing".to_string()));
+        }
+
         let output = items
             .iter()
             .map(|(name, value)| format!("{name:<24}{value}\n"))
@@ -2432,7 +2541,10 @@ pub fn load_env_file() -> Result<()> {
             continue;
         }
         if let Some((key, value)) = line.split_once('=') {
-            env::set_var(key.trim(), value.trim());
+            #[allow(unused_unsafe)]
+            unsafe {
+                env::set_var(key.trim(), value.trim());
+            }
         }
     }
     Ok(())
@@ -2568,6 +2680,15 @@ pub struct LastMessage {
     pub input: Input,
     pub output: String,
     pub continuous: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CopilotAuthState {
+    pub github_oauth_token: Option<String>,
+    pub copilot_api_token: Option<String>,
+    pub expires_at: Option<i64>,
+    pub refresh_in: Option<i64>,
+    pub obtained_at: Option<i64>,
 }
 
 impl LastMessage {

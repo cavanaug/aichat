@@ -540,6 +540,59 @@ pub fn json_str_from_map<'a>(
 }
 
 async fn set_client_models_config(client_config: &mut Value, client: &str) -> Result<String> {
+    if client == "github-copilot" {
+        let mut model_names = vec![];
+        if let Ok(Some(state)) = Config::load_github_copilot_auth_state() {
+            if let Some(token) = state
+                .copilot_api_token
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
+                let headers = vec![
+                    ("Editor-Version".to_string(), "vscode/1.105.1".to_string()),
+                    (
+                        "Editor-Plugin-Version".to_string(),
+                        "copilot-chat/0.32.4".to_string(),
+                    ),
+                    (
+                        "User-Agent".to_string(),
+                        "GitHubCopilotChat/0.32.4".to_string(),
+                    ),
+                    (
+                        "Copilot-Integration-Id".to_string(),
+                        "vscode-chat".to_string(),
+                    ),
+                ];
+                match abortable_run_with_spinner(
+                    fetch_models("https://api.githubcopilot.com", Some(token), Some(&headers)),
+                    "Fetching models",
+                    create_abort_signal(),
+                )
+                .await
+                {
+                    Ok(v) => model_names = v,
+                    Err(err) => eprintln!("✗ Fetch models failed: {err}"),
+                }
+            }
+        }
+
+        if model_names.is_empty() {
+            if let Some(provider) = ALL_PROVIDER_MODELS.iter().find(|v| v.provider == client) {
+                model_names = provider
+                    .models
+                    .iter()
+                    .filter(|v| v.model_type == "chat")
+                    .map(|v| v.name.clone())
+                    .collect();
+            }
+        }
+        let model_name = select_model(model_names.clone())?;
+        let models: Vec<Value> = model_names.iter().map(|v| json!({ "name": v })).collect();
+        client_config["models"] = models.into();
+        return Ok(format!("{client}:{model_name}"));
+    }
+
     if let Some(provider) = ALL_PROVIDER_MODELS.iter().find(|v| v.provider == client) {
         let models: Vec<String> = provider
             .models
@@ -565,7 +618,7 @@ async fn set_client_models_config(client_config: &mut Value, client: &str) -> Re
             }),
     ) {
         match abortable_run_with_spinner(
-            fetch_models(api_base, api_key.as_deref()),
+            fetch_models(api_base, api_key.as_deref(), None),
             "Fetching models",
             create_abort_signal(),
         )

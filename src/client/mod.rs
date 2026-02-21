@@ -14,6 +14,7 @@ pub use stream::*;
 
 register_client!(
     (openai, "openai", OpenAIConfig, OpenAIClient),
+    (copilot, "github-copilot", CopilotConfig, CopilotClient),
     (
         openai_compatible,
         "openai-compatible",
@@ -33,7 +34,7 @@ register_client!(
     (bedrock, "bedrock", BedrockConfig, BedrockClient),
 );
 
-pub const OPENAI_COMPATIBLE_PROVIDERS: [(&str, &str); 18] = [
+pub const OPENAI_COMPATIBLE_PROVIDERS: [(&str, &str); 19] = [
     ("ai21", "https://api.ai21.com/studio/v1"),
     (
         "cloudflare",
@@ -43,6 +44,7 @@ pub const OPENAI_COMPATIBLE_PROVIDERS: [(&str, &str); 18] = [
     ("deepseek", "https://api.deepseek.com"),
     ("ernie", "https://qianfan.baidubce.com/v2"),
     ("github", "https://models.inference.ai.azure.com"),
+    ("github-copilot", "https://api.githubcopilot.com"),
     ("groq", "https://api.groq.com/openai/v1"),
     ("hunyuan", "https://api.hunyuan.cloud.tencent.com/v1"),
     ("minimax", "https://api.minimax.chat/v1"),

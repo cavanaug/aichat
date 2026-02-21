@@ -44,6 +44,7 @@ async fn main() -> Result<()> {
         WorkingMode::Cmd
     };
     let info_flag = cli.info
+        || cli.github_copilot_auth_status
         || cli.sync_models
         || cli.list_models
         || cli.list_roles
@@ -154,6 +155,11 @@ async fn run(config: GlobalConfig, cli: Cli, text: Option<String>) -> Result<()>
     }
     if cli.info {
         let info = config.read().info()?;
+        println!("{info}");
+        return Ok(());
+    }
+    if cli.github_copilot_auth_status {
+        let info = config.read().github_copilot_auth_status()?;
         println!("{info}");
         return Ok(());
     }
